@@ -1,25 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mixi_training_2023/models/message.dart';
-import 'package:mixi_training_2023/providers/messages_provider.dart';
+import 'package:mixi_training_2023/repositories/chart_repository.dart';
 import 'package:mixi_training_2023/widgets/assistant_message_bubble.dart';
 import 'package:mixi_training_2023/widgets/system_message_bubble.dart';
 import 'package:mixi_training_2023/widgets/user_message_bubble.dart';
 
-class ChatPage extends ConsumerStatefulWidget {
+class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
 
   @override
   ChatPageState createState() => ChatPageState();
 }
 
-class ChatPageState extends ConsumerState<ChatPage> {
+class ChatPageState extends State<ChatPage> {
   final _controller = TextEditingController();
+  final _chatRepository = ChatRepository();
+  List<Message> _messages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialMessages();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(messagesProvider);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Chat with OpenAI')),
       body: SafeArea(
@@ -28,9 +33,9 @@ class ChatPageState extends ConsumerState<ChatPage> {
             Expanded(
               child: ListView.builder(
                 reverse: true,
-                itemCount: state.value?.length ?? 0,
+                itemCount: _messages.length,
                 itemBuilder: (context, index) {
-                  final message = state.value![index];
+                  final message = _messages[index];
                   switch (message.role) {
                     case MessageRole.system:
                       return Padding(
@@ -94,9 +99,40 @@ class ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
+  Future<void> _loadInitialMessages() async {
+    final initialMessages = [
+      Message(
+        role: MessageRole.system,
+        content: '学校の先生として答えてください',
+      ),
+    ];
+    setState(() {
+      _messages = initialMessages;
+    });
+    final response = await _chatRepository.getChatCompletions(initialMessages);
+    setState(() {
+      _messages = [
+        ...response.choices.map((choice) => choice.message),
+        ...initialMessages,
+      ];
+    });
+  }
+
   Future<void> _sendMessage() async {
     final text = _controller.text;
     _controller.clear();
-    await ref.read(messagesProvider.notifier).sendMessage(text);
+    setState(() {
+      _messages = [
+        Message(role: MessageRole.user, content: text),
+        ..._messages,
+      ];
+    });
+    final response = await _chatRepository.getChatCompletions(_messages);
+    setState(() {
+      _messages = [
+        ...response.choices.map((choice) => choice.message),
+        ..._messages,
+      ];
+    });
   }
 }
